@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  gateway-api:
+    build: .
+    container_name: rupu_api
+    ports: 
+      - '8000:8000'
+    volumes:
+      - './src/:/app/src'
+      - sqlite_data:/app/data
+    environment:
+      - PYTHONBUFFERED=1
+      - DATABASE_URL=sqlite:////app/data/rupu.db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rupu-mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  gateway-worker:
+    build: .
+    command: python src/messaging/worker.py
+    volumes:
+      - .:/app
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/rupu.db
+    depends_on:
+      - rabbitmq
+
+  gateway-logger:
+    build: .
+    command: python src/messaging/logger_consumer.py
+    volumes:
+      - .:/app
+    depends_on:
+      - rabbitmq
+
+  gateway-grpc:
+    build: .
+    command: python src/grpc/server.py
+    volumes:
+      - .:/app
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/rupu.db
+      - PYTHONPATH=/app/src
+    ports:
+      - "50051:50051"
+    depends_on:
+      - rabbitmq
+
+volumes:
+  sqlite_data:
+
+
+

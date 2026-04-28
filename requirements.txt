@@ -1,0 +1,14 @@
+fastapi
+sqlalchemy
+uvicorn[standard]
+pydantic
+pydantic-settings
+pika
+pytest
+pytest-asyncio
+httpx
+ruff
+requests
+grpcio==1.62.1
+grpcio-tools==1.62.1
+

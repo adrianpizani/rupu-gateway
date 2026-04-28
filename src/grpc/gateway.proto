@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package gateway;
+
+// Definición del servicio
+service JobGateway {
+    rpc CreateJob (CreateJobRequest) returns (JobResponse);
+    rpc GetJob (GetJobRequest) returns (JobResponse);
+}
+
+// Mensajes para CreateJob
+message CreateJobRequest {
+    DocumentMetadata document = 1;
+    PipelineConfig pipeline_config = 2;
+}
+
+message DocumentMetadata {
+    string name = 1;
+    string type = 2;
+    string content = 3;
+}
+
+message PipelineConfig {
+    repeated string stages = 1;
+}
+
+// Mensaje de respuesta (compartido)
+message JobResponse {
+    string id = 1;
+    string status = 2;
+    string result = 3; // Opcional, como JSON string
+}
+
+message GetJobRequest {
+    string job_id = 1;
+}
