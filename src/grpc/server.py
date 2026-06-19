@@ -3,7 +3,7 @@ from concurrent import futures
 import gateway_pb2
 import gateway_pb2_grpc
 from core.job_service import create_job, get_job
-from api.schemas import JobCreate, DocumentMetadata, PipelineConfig
+from api.schemas import JobCreate, DocumentMetadata, PipelineConfig, StageConfig
 from models.database import SessionLocal
 import json
 
@@ -19,8 +19,9 @@ class JobGatewayService(gateway_pb2_grpc.JobGatewayServicer):
             )
             
             # gRPC usa un objeto 'repeated' que convertimos a lista
+            # gRPC pasa stages como strings planos → convertimos a StageConfig
             pipe_config = PipelineConfig(
-                stages=list(request.pipeline_config.stages)
+                stages=[StageConfig(name=s) for s in request.pipeline_config.stages]
             )
             
             job_data = JobCreate(

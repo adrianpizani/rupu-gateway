@@ -9,7 +9,7 @@ def test_api_create_job(client, db):
             "content": "lorem ipsum"
         },
         "pipelineconfig": {
-            "stages": ["extract", "analyze"]
+            "stages": [{"name": "extract"}, {"name": "analyze"}]
         }
     }
 
@@ -25,7 +25,7 @@ def test_api_create_job(client, db):
     assert "id" in data
     assert data["status"] == "pending"
     assert "id" in data
-    assert data["config"]["config"]["stages"] == ["extract", "analyze"]
+    assert data["config"]["config"]["stages"] == [{"name": "extract"}, {"name": "analyze"}]
 
 def test_api_create_job_invalid_data(client):
     # Payload incompleto (falta el documento)

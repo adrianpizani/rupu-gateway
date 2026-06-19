@@ -11,4 +11,10 @@ ruff
 requests
 grpcio==1.62.1
 grpcio-tools==1.62.1
-
+langchain
+langchain-core
+langchain-openai
+langchain-anthropic
+langchain-ollama
+aio-pika
+sse-starlette

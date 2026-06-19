@@ -1,13 +1,13 @@
 import pytest
 from models.job import Job, JobStatus
 from core.job_service import update_job_status, create_job
-from api.schemas import JobCreate, DocumentMetadata, PipelineConfig, Stages
+from api.schemas import JobCreate, DocumentMetadata, PipelineConfig, StageConfig
 
 def test_create_job_service(db):
     # Mock de datos de entrada
     job_data = JobCreate(
         document=DocumentMetadata(name="test.pdf", type="pdf", content="base64content"),
-        pipelineconfig=PipelineConfig(stages=[Stages.EXTRACT])
+        pipelineconfig=PipelineConfig(stages=[StageConfig(name="extract")])
     )
     
     # Ejecutar creación
@@ -15,7 +15,7 @@ def test_create_job_service(db):
     
     assert job.id is not None
     assert job.status == JobStatus.PENDING
-    assert job.config["config"]["stages"] == ["extract"]
+    assert job.config["config"]["stages"] == [{"name": "extract"}]
 
 def test_valid_status_transition(db):
     # Crear un job inicial

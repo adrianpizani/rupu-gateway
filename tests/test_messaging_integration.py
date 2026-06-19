@@ -28,7 +28,7 @@ def test_rabbitmq_integration():
             "content": "Contenido de prueba para RabbitMQ"
         },
         pipelineconfig={
-            "stages": ["extract"]
+            "stages": [{"name": "extract"}]
         }
     )
     

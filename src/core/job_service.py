@@ -14,7 +14,15 @@ VALID_STATUS = {
     JobStatus.CANCELLED : []
 }
 
+JOB_EVENTS = {
+   JobStatus.COMPLETED : "job.completed",
+   JobStatus.CANCELLED : "job.cancelled",
+   JobStatus.FAILED : "job.failed",
+   JobStatus.PROCESSING: "job.processing"
+}
+
 events = EventPublisher(queues=["events", "tasks"])
+
 
 def update_job_status(job: Job, new_status: JobStatus, db_session: Session) -> Job:
     """Safely updates the job status, preventing invalid state transitions."""
@@ -22,7 +30,7 @@ def update_job_status(job: Job, new_status: JobStatus, db_session: Session) -> J
         job.status = new_status
         db_session.commit()
         db_session.refresh(job)
-        events.publish_event('job.status_updated', job.id, job.config, "events")
+        events.publish_event(JOB_EVENTS.get(new_status, "job.status_updated"), job.id, job.config, "events")
         return job
     raise ValueError("Trying to update to a not valid status")
 
@@ -49,8 +57,8 @@ def create_job(job_data: JobCreate, db: Session) -> JobResponse:
         db.refresh(job)
         events.publish_event('job.created', job.id, job.config, "tasks")
         return job
-    except ValueError:
-        raise ValueError("Could not create a job with provided data")
+    except Exception:
+        raise HTTPException(status_code=400, detil="Couldn't create job with specific data")
     
 def get_job(job_id: str, db: Session) -> Job:
     """Retrieves a single job by ID."""
@@ -71,4 +79,8 @@ def cancel_job(job_id: str, db: Session):
     job = db.get(Job, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job doesn't exist")
-    return update_job_status(job, JobStatus.CANCELLED, db)
+    
+    try:
+        return update_job_status(job, JobStatus.CANCELLED, db)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Couldn't cancel job, invalid new status")

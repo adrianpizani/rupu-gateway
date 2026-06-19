@@ -16,7 +16,7 @@ def test_full_pipeline_e2e():
             "content": "Contenido para procesar"
         },
         "pipelineconfig": {
-            "stages": ["extract"]
+            "stages": [{"name": "extract"}]
         }
     }
     
