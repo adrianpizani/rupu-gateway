@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# Garantiza que tanto `from src.X import Y` como `from X import Y`
+# (mezcla que existe en el código) resuelvan correctamente sin
+# depender de dónde se ejecute pytest.
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+asyncio_mode = "strict"

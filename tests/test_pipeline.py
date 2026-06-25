@@ -8,7 +8,6 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from core.pipeline import process_doc
 from models.job import Job, JobStatus
-from src.llm.chains.registry import ChainRegistry
 
 
 @pytest.fixture
@@ -37,17 +36,20 @@ async def test_process_doc_success(mock_db_session):
     mock_chain = AsyncMock()
     mock_chain.process.return_value = "texto procesado"
 
-    with patch("core.pipeline.ChainRegistry.get_chain", return_value=mock_chain), \
+    # Importante: parcheamos get_chain con un Mock (no con return_value=),
+    # porque necesitamos inspeccionar .call_count / assert_any_call sobre
+    # el mock en sí, no sobre la chain.
+    with patch("core.pipeline.ChainRegistry.get_chain") as mock_get_chain, \
          patch("core.pipeline.LLMFactory.get_llm") as mock_llm_factory:
-
+        mock_get_chain.return_value = mock_chain
         await process_doc(job_id)
 
     assert test_job.status == JobStatus.COMPLETED
     assert test_job.result == "texto procesado"
     # Verificar que se invocó el registry con los nombres correctos
-    assert ChainRegistry.get_chain.call_count == 2  # extract + analyze
-    ChainRegistry.get_chain.assert_any_call("extract", mock_llm_factory.return_value)
-    ChainRegistry.get_chain.assert_any_call("analyze", mock_llm_factory.return_value)
+    assert mock_get_chain.call_count == 2  # extract + analyze
+    mock_get_chain.assert_any_call("extract", mock_llm_factory.return_value)
+    mock_get_chain.assert_any_call("analyze", mock_llm_factory.return_value)
 
 
 @pytest.mark.asyncio

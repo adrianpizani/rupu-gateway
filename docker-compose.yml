@@ -4,10 +4,12 @@ services:
   gateway-api:
     build: .
     container_name: rupu_api
-    ports: 
+    ports:
       - '8000:8000'
     volumes:
       - './src/:/app/src'
+      - './tests/:/app/tests'        # tests como volumen para no rebuildear
+      - './pyproject.toml:/app/pyproject.toml'
       - sqlite_data:/app/data
     environment:
       - PYTHONBUFFERED=1
