@@ -348,3 +348,140 @@ class LLMConfig(BaseModel):
 | 4 | Sin soporte para streaming | **SSE (Server-Sent Events)** para respuestas LLM en tiempo real |
 | 5 | Sin observabilidad LLM | **Tracing** con LangSmith, logging de tokens/latencia |
 | 6 | Sin configuración de modelos | **Settings extensibles** para múltiples proveedores LLM |
+
+
+---
+
+## ✅ Progreso - Sesión 1 (18 Jun 2025)
+
+### 🎯 Decisiones de Diseño Tomadas
+
+| Decisión | Opción Elegida | Alternativa Descartada |
+|---|---|---|
+| Estrategia de chains | **Registry Pattern** con decorador `@register()` | Flag `use_llm` + switch mocks/LLM |
+| Formato de stages | **`StageConfig.name: str`** (string libre) | Enum fijo `Stages` (solo extract/analyze/enrich) |
+| Pipeline | **100% LLM**, sin mock fallback | Flag de compatibilidad con mocks |
+| Instanciación de LLM | **Fábrica con caché** (`LLMFactory`) | Crear nuevo LLM por stage |
+| Imports de proveedores | **Diferidos** (dentro de `get_llm()`) | Globales al inicio del módulo |
+
+### 📦 Módulo LLM Creado
+
+```
+src/llm/
+├── __init__.py
+├── chains/
+│   ├── __init__.py
+│   ├── base.py                    # BaseLLMChain (ABC)
+│   ├── registry.py                # ChainRegistry con decorador @register()
+│   ├── extraction_chain.py        # @register("extract")
+│   ├── analysis_chain.py          # @register("analyze")
+│   └── enrichment_chain.py        # @register("enrich")
+├── providers/
+│   ├── __init__.py
+│   ├── models.py                  # LLMProvider enum, LLMConfig, get_llm()
+│   └── factory.py                 # LLMFactory con caché de instancias
+└── streaming/
+    └── __init__.py
+```
+
+### 🏗️ Archivos Modificados
+
+| Archivo | Cambio |
+|---|---|
+| `requirements.txt` | `+ langchain-ollama` |
+| `src/api/schemas.py` | Eliminado `Stages` enum; `StageConfig.name` ahora es `str`; `PipelineConfig` con `llm_provider` y `llm_model` |
+| `src/core/pipeline.py` | Eliminados imports de mocks; ahora usa `ChainRegistry` + `LLMFactory` |
+| `src/grpc/server.py` | Actualizado constructor de `PipelineConfig` con `StageConfig` |
+
+### 🧪 Tests Actualizados
+
+| Test | Cambio |
+|---|---|
+| `test_core_jobs.py` | `Stages.EXTRACT` → `StageConfig(name="extract")` |
+| `test_api_jobs.py` | Payloads con `{"name": "extract"}` |
+| `test_pipeline.py` | Rewrite: mocks de `ChainRegistry.get_chain` + `LLMFactory.get_llm` |
+| `test_resilience.py` | Rewrite: mismo cambio que pipeline |
+| `test_messaging_integration.py` | Payload con `{"name": "extract"}` |
+| `test_e2e_flow.py` | Payload con `{"name": "extract"}` |
+
+### 📊 Estado de las Fases
+
+| Fase | Estado | Notas |
+|---|---|---|
+| **Fase 0**: Dependencias | ✅ Completada | `requirements.txt` actualizado con todas las libs |
+| **Fase 1**: Configuración Multi-Modelo | ✅ Completada | `models.py` + `factory.py` con caché |
+| **Fase 2**: LangChain Chains | ✅ Completada | 3 chains registradas + Registry Pattern |
+| **Fase 3**: Async Messaging (aio-pika) | ⬜ Pendiente | Reemplazar `pika` por `aio-pika` |
+| **Fase 4**: Streaming SSE | ⬜ Pendiente | Endpoints directos chat/stream con `sse-starlette` |
+| **Fase 5**: Observabilidad | ⬜ Pendiente | LangSmith tracing, logging de tokens/latencia |
+
+### 🤔 Conceptos Clave Aprendidos
+
+1. **ChainRegistry**: Las chains se auto-registran con `@ChainRegistry.register("nombre")`. Para agregar una nueva operación (ej: `detect_faces`), solo crear la chain class con el decorador — no se toca el pipeline.
+
+2. **LCEL (LangChain Expression Language)**: `PROMPT | llm | StrOutputParser()` construye un DAG de procesamiento. `ainvoke()` es la versión async.
+
+3. **Factory con caché**: `LLMFactory` mantiene un `dict` de instancias indexadas por `provider:modelo`, evitando recrear conexiones HTTP en cada stage.
+
+4. **Imports diferidos**: En `get_llm()`, cada proveedor se importa solo dentro de su `case`, así no hay errores si falta una dependencia no usada.
+
+
+---
+
+## ✅ Progreso - Sesión 1.5 (25 Jun 2026) — Reparar base LLM
+
+### 🎯 Objetivo
+
+Sesión 1 dejó el módulo `src/llm/` armado, pero la suite de tests **no corría** por bloqueos previos a Sesión 2. Esta sesión repara la base para poder avanzar seguros.
+
+### 🐛 Problemas Encontrados
+
+| # | Problema | Impacto |
+|---|---|---|
+| 1 | `tests/conftest.py` con acentos sin declarar encoding | `SyntaxError` al cargar pytest, **0 tests corrían** |
+| 2 | `ChainRegistry._chains` se llena por side-effect de import | Si nadie importa las 3 chains explícitamente, `get_chain()` lanza `ValueError` en runtime |
+| 3 | `test_pipeline.py` usaba `patch(..., return_value=mock_chain)` | Reemplaza el atributo con la chain, no con un Mock → `assert ... .call_count` falla |
+| 4 | `src.llm.chains.__init__.py` era solo docstring | No re-exportaba nada, el patrón `from src.llm.chains import X` no funcionaba |
+| 5 | `pyproject.toml` inexistente | `pytest` no sabía cómo resolver la mezcla de imports `from src.X` vs `from X` |
+| 6 | `docker-compose.yml` no montaba `./tests/` ni `pyproject.toml` en `gateway-api` | Cambios a tests no se reflejaban sin rebuild |
+
+### 🔧 Cambios Aplicados
+
+| Archivo | Cambio |
+|---|---|
+| `tests/conftest.py` | Encoding utf-8; import diferido de `main.app` para no disparar conexión RabbitMQ al cargar conftest |
+| `src/llm/chains/__init__.py` | Importa las 3 chains explícitamente (registro side-effect); re-exporta `ChainRegistry`, `BaseLLMChain` |
+| `src/llm/__init__.py` | Re-exporta `ChainRegistry`, `BaseLLMChain`, `LLMConfig`, `LLMProvider`, `LLMFactory` |
+| `src/llm/providers/__init__.py` | Re-exporta `LLMConfig`, `LLMProvider`, `LLMFactory`, `get_llm` |
+| `tests/test_pipeline.py` | Patch con `Mock` separado (no `return_value=` directo) para poder inspeccionar `call_count` |
+| `pyproject.toml` *(nuevo)* | `[tool.pytest.ini_options]` con `pythonpath = ["src", "."]` |
+| `docker-compose.yml` | `gateway-api` ahora monta `./tests/` y `./pyproject.toml` como volúmenes |
+| `tests/test_llm_chains.py` *(nuevo)* | 7 tests para ChainRegistry |
+| `tests/test_llm_factory.py` *(nuevo)* | 4 tests para LLMFactory caché |
+| `tests/test_llm_models.py` *(nuevo)* | 7 tests para LLMConfig + routing de `get_llm()` |
+
+### 📊 Resultados
+
+```
+32 passed, 2 warnings in 8.18s
+```
+
+(Excluyendo `test_e2e_flow.py` que requiere API + Worker + RabbitMQ levantados en el host, no es unit-test.)
+
+### 💡 Aprendizajes
+
+1. **Mocking de imports diferidos**: cuando `get_llm()` hace `from langchain_openai import ChatOpenAI` adentro, hay que parchear `langchain_openai.ChatOpenAI`, **no** `src.llm.providers.models.ChatOpenAI` (atributo que nunca existió en ese módulo).
+
+2. **Conftest side-effects**: importar `main.app` arrastra `core.pipeline → messaging.publisher → EventPublisher.__init__ → RabbitMQ`. En tests sin broker, eso rompe. Mover el import dentro del fixture que lo usa.
+
+3. **`patch(..., return_value=mock)` ≠ `patch(..., side_effect=mock)`**: usar `return_value=` reemplaza el atributo con la cadena misma, perdés el `Mock` para asserts. Usar un `Mock` con `.return_value = ...` o `side_effect = ...` mantiene la referencia observable.
+
+4. **`pyproject.toml` > ENV vars**: `pythonpath` en pytest config es más portable que confiar en `PYTHONPATH` de Docker. Funciona local, en CI, en Docker, en venv.
+
+### 🚧 Pendiente (Sesión 2+)
+
+- **Fase 3 (Async Messaging)**: reemplazar `pika` por `aio-pika` en worker/publisher.
+- **Fase 4 (Streaming SSE)**: endpoints `/chat/stream` con `sse-starlette`.
+- **Fase 5 (Observabilidad)**: LangSmith tracing + métricas de tokens/latencia.
+- Bug pre-existente: `test_e2e_flow.py` necesita stack real + `requests` apuntando al servicio correcto.
+
